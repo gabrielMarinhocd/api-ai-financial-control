@@ -12,8 +12,8 @@ API REST desenvolvida com **Spring Boot** para gerenciamento financeiro, permiti
 * 🐘 PostgreSQL
 * 🤖 Spring AI / OpenAI
 * 📦 Maven
-* 🧠 Ollama
-* 🗣️ Whisper 
+* 🧠 Ollama (IA)
+* 🗣️ Whisper (IA)
 
 ---
 
