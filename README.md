@@ -10,9 +10,10 @@ API REST desenvolvida com **Spring Boot** para gerenciamento financeiro, permiti
 * 🌱 Spring Boot
 * 🗄️ Spring Data JPA
 * 🐘 PostgreSQL
-* 🍃 MongoDB
 * 🤖 Spring AI / OpenAI
 * 📦 Maven
+* 🧠 Ollama
+* 🗣️ Whisper 
 
 ---
 
