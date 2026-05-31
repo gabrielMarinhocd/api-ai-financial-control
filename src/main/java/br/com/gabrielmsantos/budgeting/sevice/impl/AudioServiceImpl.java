@@ -8,6 +8,9 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -136,12 +139,14 @@ public class AudioServiceImpl implements AudioService {
         return transcription.toString().trim();
     }
 
+
     public String searchFuncionalitiesIA(String finalText) {
         System.out.println("TRANSCRIÇÃO:");
         System.out.println(finalText);
 
         // FUNCIONALIDADES
-        var functionalities = functionalitiesService.findAll();
+        var functionalities = functionalitiesService.findAllWithParameters();
+
         var functionalitiesDto = functionalities.stream()
                 .map(FunctionalitiesDto::new)
                 .toList();
@@ -157,28 +162,33 @@ public class AudioServiceImpl implements AudioService {
                         f.description()
                 ))
                 .collect(Collectors.joining(",\n"));
+
         // PROMPT
         String prompt = """
-                Você é um interpretador de comandos.
+                Você é um interpretador de comandos de um sistema financeiro.
                 
-                Sua função é analisar o texto do usuário e identificar qual funcionalidade executar.
+                REGRAS OBRIGATÓRIAS:
                 
-                Funcionalidades disponíveis:
+                1. Retorne APENAS JSON válido.
+                2. Não adicione explicações.
+                3. Não utilize markdown.
+                4. Não utilize ```json.
+                5. Não utilize blocos de código.
+                6. Escolha apenas UMA funcionalidade.
+                7. Extraia apenas os parâmetros identificados.
+                8. Nunca invente valores.
+                9. Considere erros de digitação, sinônimos e linguagem natural.
+                10. Todas as solicitações pertencem ao contexto financeiro.
                 
-                [
+                FUNCIONALIDADES DISPONÍVEIS:
+                
                 %s
-                ]
                 
-                REGRAS:
+                SOLICITAÇÃO DO USUÁRIO:
                 
-                1 - Retorne SOMENTE JSON.
-                2 - Não explique nada.
-                3 - Não use markdown.
-                4 - Não use ```json.
-                5 - Escolha apenas UMA funcionalidade.
-                6 - Extraia os parâmetros necessários da frase.
+                %s
                 
-                Estrutura obrigatória:
+                FORMATO OBRIGATÓRIO:
                 
                 {
                   "execute": {
@@ -187,40 +197,74 @@ public class AudioServiceImpl implements AudioService {
                   }
                 }
                 
-                Exemplo:
+                SE NÃO ENTENDER A SOLICITAÇÃO:
                 
-                Entrada:
-                Gere um alerta com a mensagem Bem vindo
-                
-                Saída:
                 {
                   "execute": {
                     "name": "alerta",
                     "parameters": {
-                      "message": "Bem vindo"
+                      "message": "Não foi possível identificar sua solicitação."
                     }
                   }
                 }
                 
-                Texto do usuário:
+                SE A SOLICITAÇÃO ESTIVER INCOMPLETA:
                 
-                %s
+                {
+                  "execute": {
+                    "name": "alerta",
+                    "parameters": {
+                      "message": "Não foi possível concluir a solicitação. Verifique as informações enviadas."
+                    }
+                  }
+                }
                 """
                 .formatted(
                         functionalitiesContext,
                         finalText
                 );
 
-        // CHAMA IA
-        String response = chatClient.prompt()
-                .user(prompt)
-                .call()
-                .content();
+        try {
+            String response = chatClient.prompt()
+                    .user(prompt)
+                    .call()
+                    .content();
 
-        System.out.println("JSON GERADO:");
-        System.out.println(response);
+            System.out.println("RESPOSTA ORIGINAL IA:");
+            System.out.println(response);
 
+            // Remove markdown caso o modelo ignore as regras
+            response = response
+                    .replace("```json", "")
+                    .replace("```", "")
+                    .trim();
 
-        return response;
+            ObjectMapper mapper = new ObjectMapper();
+
+            JsonNode json = mapper.readTree(response);
+
+            String jsonValidado =
+                    mapper.writerWithDefaultPrettyPrinter()
+                            .writeValueAsString(json);
+
+            System.out.println("JSON VALIDADO:");
+            System.out.println(jsonValidado);
+
+            return jsonValidado;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+
+            return """
+                    {
+                      "execute": {
+                        "name": "alerta",
+                        "parameters": {
+                          "message": "Não foi possível processar sua solicitação."
+                        }
+                      }
+                    }
+                    """;
+        }
     }
 }

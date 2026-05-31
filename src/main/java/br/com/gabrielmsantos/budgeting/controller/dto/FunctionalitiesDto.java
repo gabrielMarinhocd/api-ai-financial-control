@@ -6,7 +6,7 @@ import org.hibernate.annotations.Any;
 
 import java.util.List;
 
-public record FunctionalitiesDto(Long id, String name, String description, List<Parameters> parametersSchema) {
+public record FunctionalitiesDto(Long id, String name, String description, List<Parameters> parameters) {
 
     public FunctionalitiesDto(Functionalities model) {
         this(model.getId(), model.getName(), model.getDescription(), model.getParameters());
@@ -17,7 +17,7 @@ public record FunctionalitiesDto(Long id, String name, String description, List<
         model.setId(this.id);
         model.setName(this.name);
         model.setDescription(this.description);
-        model.setParameters(this.parametersSchema);
+        model.setParameters(this.parameters);
 
         return model;
     }

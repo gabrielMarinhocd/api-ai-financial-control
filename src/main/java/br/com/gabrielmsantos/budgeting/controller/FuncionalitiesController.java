@@ -26,7 +26,7 @@ public record FuncionalitiesController(FunctionalitiesService functionalitiesSer
             @ApiResponse(responseCode = "200", description = "Operation successful")
     })
     public ResponseEntity<List<FunctionalitiesDto>> findAll() {
-        var functionalitiess = functionalitiesService.findAll();
+        var functionalitiess = functionalitiesService.findAllWithParameters();
         var functionalitiessDto = functionalitiess.stream().map(FunctionalitiesDto::new).collect(Collectors.toList());
         return ResponseEntity.ok(functionalitiessDto);
     }
