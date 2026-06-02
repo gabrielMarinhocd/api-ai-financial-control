@@ -1,4 +1,4 @@
-# 💰 Budgeting API
+# 💰 Financial Control IA Api
 
 API REST desenvolvida com **Spring Boot** para gerenciamento financeiro, permitindo a criação de tabelas, funcionalidades dinâmicas, parâmetros e integração com IA para execução de comandos por texto e voz.
 
@@ -10,9 +10,10 @@ API REST desenvolvida com **Spring Boot** para gerenciamento financeiro, permiti
 * 🌱 Spring Boot
 * 🗄️ Spring Data JPA
 * 🐘 PostgreSQL
-* 🍃 MongoDB
 * 🤖 Spring AI / OpenAI
 * 📦 Maven
+* 🧠 Ollama (IA)
+* 🗣️ Whisper (IA)
 
 ---
 
