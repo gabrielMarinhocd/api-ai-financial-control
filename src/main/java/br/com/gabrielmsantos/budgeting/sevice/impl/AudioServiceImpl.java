@@ -4,6 +4,8 @@ import br.com.gabrielmsantos.budgeting.controller.dto.FunctionalitiesDto;
 import br.com.gabrielmsantos.budgeting.sevice.AudioService;
 import br.com.gabrielmsantos.budgeting.sevice.FunctionalitiesService;
 import br.com.gabrielmsantos.budgeting.sevice.exception.BusinessException;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -16,6 +18,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -139,12 +143,10 @@ public class AudioServiceImpl implements AudioService {
         return transcription.toString().trim();
     }
 
-
     public String searchFuncionalitiesIA(String finalText) {
         System.out.println("TRANSCRIÇÃO:");
         System.out.println(finalText);
 
-        // FUNCIONALIDADES
         var functionalities = functionalitiesService.findAllWithParameters();
 
         var functionalitiesDto = functionalities.stream()
@@ -154,68 +156,72 @@ public class AudioServiceImpl implements AudioService {
         String functionalitiesContext = functionalitiesDto.stream()
                 .map(f -> """
                         {
-                          "name": "%s",
-                          "description": "%s"
+                          "name":"%s",
+                          "description":"%s",
+                          "parameters":[%s]
                         }
                         """.formatted(
                         f.name(),
-                        f.description()
+                        f.description(),
+                        f.parameters().stream()
+                                .map(p -> """
+                                        {
+                                          "type":"%s"
+                                        }
+                                        """.formatted(
+                                        p.getType()
+                                ))
+                                .collect(Collectors.joining(","))
                 ))
-                .collect(Collectors.joining(",\n"));
+                .collect(Collectors.joining(",", "[", "]"));
 
-        // PROMPT
+        System.out.println("FUNCIONALIDADES:");
+        System.out.println(functionalitiesContext);
+
         String prompt = """
-                Você é um interpretador de comandos de um sistema financeiro.
+                Você é um interpretador de comandos.
                 
-                REGRAS OBRIGATÓRIAS:
+                Escolha apenas uma funcionalidade da lista.
                 
-                1. Retorne APENAS JSON válido.
-                2. Não adicione explicações.
-                3. Não utilize markdown.
-                4. Não utilize ```json.
-                5. Não utilize blocos de código.
-                6. Escolha apenas UMA funcionalidade.
-                7. Extraia apenas os parâmetros identificados.
-                8. Nunca invente valores.
-                9. Considere erros de digitação, sinônimos e linguagem natural.
-                10. Todas as solicitações pertencem ao contexto financeiro.
-                
-                FUNCIONALIDADES DISPONÍVEIS:
+                Funcionalidades disponíveis:
                 
                 %s
                 
-                SOLICITAÇÃO DO USUÁRIO:
+                Solicitação do usuário:
                 
                 %s
                 
-                FORMATO OBRIGATÓRIO:
+                Regras:
+                - Retorne APENAS JSON.
+                - Não utilize markdown.
+                - Não utilize ```json.
+                - Não escreva explicações.
+                - Preserve a ordem dos parâmetros definida na funcionalidade.
+                - O campo "parameters" deve conter APENAS os valores extraídos.
+                - NÃO retorne objetos dentro de "parameters".
+                - NÃO retorne nome dos parâmetros.
+                - NÃO retorne tipo dos parâmetros.
+                - Strings devem ser retornadas como texto.
+                - Inteiros devem ser retornados como número.
+                - Se não entender a solicitação use a funcionalidade alerta.
+                
+                Exemplo correto:
+                
+                {
+                  "execute": {
+                    "name": "alerta",
+                    "parameters": [
+                      "teste"
+                    ]
+                  }
+                }
+                
+                Formato obrigatório:
                 
                 {
                   "execute": {
                     "name": "nome_da_funcionalidade",
-                    "parameters": {}
-                  }
-                }
-                
-                SE NÃO ENTENDER A SOLICITAÇÃO:
-                
-                {
-                  "execute": {
-                    "name": "alerta",
-                    "parameters": {
-                      "message": "Não foi possível identificar sua solicitação."
-                    }
-                  }
-                }
-                
-                SE A SOLICITAÇÃO ESTIVER INCOMPLETA:
-                
-                {
-                  "execute": {
-                    "name": "alerta",
-                    "parameters": {
-                      "message": "Não foi possível concluir a solicitação. Verifique as informações enviadas."
-                    }
+                    "parameters": []
                   }
                 }
                 """
@@ -225,43 +231,93 @@ public class AudioServiceImpl implements AudioService {
                 );
 
         try {
+
+            System.out.println("\n===== PROMPT =====");
+            System.out.println(prompt);
+
             String response = chatClient.prompt()
                     .user(prompt)
                     .call()
                     .content();
 
-            System.out.println("RESPOSTA ORIGINAL IA:");
-            System.out.println(response);
+            System.out.println("\n===== RESPOSTA BRUTA =====");
+            System.out.println("[" + response + "]");
+            System.out.println("É null? " + (response == null));
 
-            // Remove markdown caso o modelo ignore as regras
+            if (response == null || response.isBlank()) {
+                throw new RuntimeException("Modelo retornou resposta vazia");
+            }
+
             response = response
                     .replace("```json", "")
                     .replace("```", "")
                     .trim();
 
+            if ("null".equalsIgnoreCase(response)) {
+                throw new RuntimeException("Modelo retornou literal 'null'");
+            }
+
             ObjectMapper mapper = new ObjectMapper();
 
             JsonNode json = mapper.readTree(response);
 
-            String jsonValidado =
-                    mapper.writerWithDefaultPrettyPrinter()
-                            .writeValueAsString(json);
+            JsonNode executeNode = json.path("execute");
+            JsonNode parametersNode = executeNode.path("parameters");
 
-            System.out.println("JSON VALIDADO:");
-            System.out.println(jsonValidado);
+            if (parametersNode.isArray() && executeNode instanceof ObjectNode executeObject) {
 
-            return jsonValidado;
+                ArrayNode normalizedParameters = mapper.createArrayNode();
+
+                for (JsonNode parameter : parametersNode) {
+
+                    if (parameter.isObject()) {
+
+                        Iterator<Map.Entry<String, JsonNode>> fields = parameter.fields();
+
+                        while (fields.hasNext()) {
+                            Map.Entry<String, JsonNode> field = fields.next();
+
+                            JsonNode value = field.getValue();
+
+                            if (value.isInt() || value.isLong()) {
+                                normalizedParameters.add(value.asLong());
+                            } else if (value.isFloat() || value.isDouble() || value.isBigDecimal()) {
+                                normalizedParameters.add(value.asDouble());
+                            } else if (value.isBoolean()) {
+                                normalizedParameters.add(value.asBoolean());
+                            } else {
+                                normalizedParameters.add(value.asText());
+                            }
+                        }
+
+                    } else {
+                        normalizedParameters.add(parameter);
+                    }
+                }
+
+                executeObject.set("parameters", normalizedParameters);
+            }
+
+            String jsonVal = mapper
+                    .writerWithDefaultPrettyPrinter()
+                    .writeValueAsString(json);
+
+            System.out.println("\n===== JSON VALIDADO =====");
+            System.out.println(jsonVal);
+
+            return jsonVal;
 
         } catch (Exception e) {
+            System.err.println("\n===== ERRO AO PROCESSAR IA =====");
             e.printStackTrace();
 
             return """
                     {
                       "execute": {
                         "name": "alerta",
-                        "parameters": {
-                          "message": "Não foi possível processar sua solicitação."
-                        }
+                        "parameters": [
+                          "Não foi possível processar sua solicitação."
+                        ]
                       }
                     }
                     """;

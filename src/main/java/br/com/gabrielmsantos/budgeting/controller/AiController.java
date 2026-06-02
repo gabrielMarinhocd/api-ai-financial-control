@@ -1,8 +1,6 @@
 package br.com.gabrielmsantos.budgeting.controller;
 
-import br.com.gabrielmsantos.budgeting.controller.dto.FunctionalitiesDto;
 import br.com.gabrielmsantos.budgeting.dto.PromptRequest;
-import br.com.gabrielmsantos.budgeting.sevice.AudioService;
 import br.com.gabrielmsantos.budgeting.sevice.FunctionalitiesService;
 import br.com.gabrielmsantos.budgeting.sevice.impl.AudioServiceImpl;
 import org.springframework.ai.chat.client.ChatClient;
@@ -10,12 +8,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/ai")
